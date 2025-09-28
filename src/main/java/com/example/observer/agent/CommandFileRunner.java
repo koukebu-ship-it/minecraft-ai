@@ -8,9 +8,9 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -18,6 +18,8 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraft.server.level.ServerPlayer;
+
 
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
@@ -26,7 +28,7 @@ import java.nio.file.Path;
 @Mod.EventBusSubscriber(modid = ObserverMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class CommandFileRunner {
     private static final Path DIR  = FMLPaths.GAMEDIR.get().resolve("agent");
-    private static final Path FILE = DIR.resolve("commands.jsonl");
+    private static final Path FILE = DIR.resolve("commands.json");
     private static long lastSize = 0;
 
     @SubscribeEvent
@@ -66,9 +68,10 @@ public class CommandFileRunner {
                 }
                 case "kill" -> {
                     int r = j.get("radius").getAsInt();
-                    AABB box = new AABB(level.getSharedSpawnPos()).inflate(r);
+                    BlockPos center = level.getSharedSpawnPos();
+                    AABB box = new AABB(center).inflate(r);
                     for (LivingEntity ent : level.getEntitiesOfClass(LivingEntity.class, box,
-                            e -> !(e instanceof ServerPlayer))) {
+                            e2 -> !(e2 instanceof ServerPlayer))) {
                         ent.remove(Entity.RemovalReason.KILLED);
                     }
                 }
@@ -76,6 +79,18 @@ public class CommandFileRunner {
                     boolean v = j.get("value").getAsBoolean();
                     level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(v, server);
                 }
+                case "heal" -> {
+                    // 给第一个在线玩家回满血+回满饥饿
+                    var list = server.getPlayerList().getPlayers();
+                    if (!list.isEmpty()) {
+                        ServerPlayer p = list.get(0);
+                        p.setHealth(p.getMaxHealth());              // 生命直接回满
+                        var food = p.getFoodData();                 // 饥饿回满
+                        food.setFoodLevel(20);
+                        food.setSaturation(20.0F);
+                    }
+                }
+
             }
         } catch (Exception ignored) {}
     }
